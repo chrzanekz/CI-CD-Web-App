@@ -1,0 +1,74 @@
+---
+- name: Install and configure WordPress
+  hosts: all
+  become: true
+
+  vars:
+    wordpress_version: 5.8.1
+    wordpress_db_name: wordpress
+    wordpress_db_user: wp_user
+    wordpress_db_password: supersecret
+    wordpress_site_url: example.com
+    wordpress_admin_user: admin
+    wordpress_admin_password: password
+    wordpress_admin_email: admin@example.com
+
+  tasks:
+    - name: Install Apache, PHP, and MySQL
+      apt:
+        name:
+          - apache2
+          - libapache2-mod-php
+          - php
+          - php-mysql
+          - mysql-server
+        state: present
+
+    - name: Download and extract WordPress
+      get_url:
+        url: "https://wordpress.org/wordpress-{{ wordpress_version }}.tar.gz"
+        dest: /tmp/wordpress.tar.gz
+      unarchive:
+        src: /tmp/wordpress.tar.gz
+        dest: /var/www/html/
+        remote_src: yes
+      file:
+        path: /var/www/html/wordpress
+        state: directory
+
+    - name: Configure MySQL database
+      mysql_db:
+        name: "{{ wordpress_db_name }}"
+        state: present
+      mysql_user:
+        name: "{{ wordpress_db_user }}"
+        password: "{{ wordpress_db_password }}"
+        login_user: root
+        login_password: supersecret
+        host: localhost
+        priv: "{{ wordpress_db_name }}.*:ALL"
+
+    - name: Configure WordPress
+      template:
+        src: templates/wp-config.php.j2
+        dest: /var/www/html/wordpress/wp-config.php
+
+    - name: Set file permissions
+      file:
+        path: /var/www/html/wordpress
+        owner: www-data
+        group: www-data
+        recurse: yes
+
+    - name: Set up Apache virtual host
+      template:
+        src: templates/wordpress.conf.j2
+        dest: /etc/apache2/sites-available/wordpress.conf
+      notify:
+        - Enable Apache virtual host
+
+  handlers:
+    - name: Enable Apache virtual host
+      service:
+        name: apache2
+        state: restarted
